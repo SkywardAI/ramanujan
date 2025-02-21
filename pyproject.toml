@@ -5,13 +5,22 @@ authors = [
     { name = "Bowen", email = "bowen.li.hurd@gmail.com" }
 ]
 requires-python = ">=3.10"
+license = {file = "LICENSE" }
 dependencies = [
-    "ruff>=0.9.7",
+    "torch>=2.1",
+    "transformers>=4.49.0",
 ]
 
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
+
 [tool.hatch.build.targets.wheel]
 packages = ["src/ramanujan"]
+
+[dependency-groups]
+dev = [
+    "ruff>=0.9.7",
+    "transformers>=4.49.0",
+]
