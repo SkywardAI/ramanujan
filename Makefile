@@ -3,7 +3,7 @@ bundoora:
 
 
 linter:
-	@uv run ruff check .
+	@uv run --active ruff check .
 
 sync:
 	@uv sync --active
