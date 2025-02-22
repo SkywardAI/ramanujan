@@ -17,16 +17,19 @@ import torch
 import tiktoken
 
 class DataLoaderLite:
-    def __init__(self, B, T, text, process_rank, num_processes):
+    def __init__(self, B, T, text, process_rank, num_processes, master_process):
         self.B=B
         self.T=T
         self.process_rank=process_rank
         self.num_processes=num_processes
 
         # At the init load tokens from disj and store them in memory
-        enc=tiktoken.get_encoding(text)
+        enc=tiktoken.get_encoding('gpt2')
         tokens=enc.encode(text)
         self.tokens=torch.tensor(tokens)
+
+        if master_process:
+            print(f"loaded {len(self.tokens)} tokens")
 
         self.current_position=self.B*self.T*self.process_rank
     
