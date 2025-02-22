@@ -1,1 +1,1 @@
-uv python list
+# uv pip install -r requirements.txt
