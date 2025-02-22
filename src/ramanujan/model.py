@@ -57,12 +57,12 @@ class Ranmanujan(nn.Module):
                 wte=nn.Embedding(config.vocab_size, config.n_embd), # output embedding
                 wpe=nn.Embedding(config.block_size, config.n_embd), # positional encoding
                 h=nn.ModuleList([RanmanujanBlock(config) for _ in range(config.n_layer)]), # transformer layers => here is the masked multi-head attention(GPT2 version)
-                ln_f=nn.LayerNorm(config.n_embd) # final layer normalization (linear layer)
+                ln_f=nn.LayerNorm(config.n_embd), # final layer normalization (linear layer)
             )
         )
 
         self.lm_head = nn.Linear(config.n_embd, config.vocab_size, bias=False)
-        self.lm_head.weight = self.transformer.wte.weight # fix the bug weight sharing scheme
+        self.transformer.wte.weight = self.lm_head.weight # fix the bug weight sharing scheme
 
         # model initialization: std=0.02, residual init
         self.apply(self._init_weights)
@@ -71,10 +71,10 @@ class Ranmanujan(nn.Module):
         if isinstance(module, nn.Linear):
             std=0.02
             if hasattr(module, 'NANOGPT_SCALE_INIT'):
-                std=(2*self.config.n_layer) ** -0.5
-                torch.nn.init.normal_(module.weight, mean=0.0, std=std)
-                if module.bias is not None:
-                    torch.nn.init.zeros_(module.bias)
+                std*=(2*self.config.n_layer) ** -0.5
+            torch.nn.init.normal_(module.weight, mean=0.0, std=std)
+            if module.bias is not None:
+                torch.nn.init.zeros_(module.bias)
         elif isinstance(module, nn.Embedding):
             torch.nn.init.normal_(module.weight, mean=0.0, std=0.02)
     
@@ -86,7 +86,7 @@ class Ranmanujan(nn.Module):
         assert T <= self.config.block_size, f"Cannot forward sequence of length {T}, block size is only {self.config.block_size}"
 
         # Generate a 1-dimensional tensor using torch.arange(start, end) to forward the token and position embeddings.
-        pos=torch.range(0, T, dtype=torch.long, device=idx.device) # shape (T)
+        pos=torch.arange(0, T, dtype=torch.long, device=idx.device) # shape (T)
         pos_emb=self.transformer.wpe(pos) # position embeddings of shape (T, n_embd)
         tok_emb=self.transformer.wte(idx) # token embeddings of shape (B, T, n_embd)
         x=tok_emb+pos_emb # combine token and position embeddings
@@ -160,7 +160,7 @@ class Ranmanujan(nn.Module):
     
 
     # add weight decaym only for 2D params, and add fused AdamW
-    def congigure_optimizers(self, weight_decay, learning_rate, device):
+    def configure_optimizers(self, weight_decay, learning_rate, device, master_process=True):
         # start with all of the candidate parameters
         param_dict={pn: p for pn, p in self.named_parameters()}
         param_dict={pn: p for pn, p in param_dict.items() if p.requires_grad}
@@ -175,13 +175,19 @@ class Ranmanujan(nn.Module):
             {'params': nodecay_params, 'weight_decay': 0.0}
         ]
 
-        # num_decay_params=sum(p.numel() for p in decay_params)
-        # num_nodecay_params=sum(p.numel() for p in nodecay_params)
-        # @Bowen
+        num_decay_params=sum(p.numel() for p in decay_params)
+        num_nodecay_params=sum(p.numel() for p in nodecay_params)
+        
+        if master_process:
+            print(f"num decayed parameter tensors: {len(decay_params)}, with {num_decay_params:,} parameters")
+            print(f"num non-decayed parameter tensors: {len(nodecay_params)}, with {num_nodecay_params:,} parameters")
         
         # Create AdamW optimizer and use the fused version if it is available
         fused_avaliable='fused' in inspect.signature(torch.optim.AdamW).parameters
         use_fused=fused_avaliable and 'cuda' in device
+
+        if master_process:
+            print(f"using fused AdamW: {use_fused}")
 
         optimizer=torch.optim.AdamW(optim_groups, lr=learning_rate, betas=(0.9, 0.95), eps=1e-8, fused=use_fused)
 
