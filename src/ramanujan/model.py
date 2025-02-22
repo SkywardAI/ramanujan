@@ -15,6 +15,7 @@
 
 
 import torch
+import inspect
 import torch.nn as nn
 from torch.nn import functional as F
 
@@ -174,7 +175,14 @@ class Ranmanujan(nn.Module):
             {'params': nodecay_params, 'weight_decay': 0.0}
         ]
 
-        num_decay_params=sum(p.numel() for p in decay_params)
-        num_nodecay_params=sum(p.numel() for p in nodecay_params)
+        # num_decay_params=sum(p.numel() for p in decay_params)
+        # num_nodecay_params=sum(p.numel() for p in nodecay_params)
         # @Bowen
-        pass
+        
+        # Create AdamW optimizer and use the fused version if it is available
+        fused_avaliable='fused' in inspect.signature(torch.optim.AdamW).parameters
+        use_fused=fused_avaliable and 'cuda' in device
+
+        optimizer=torch.optim.AdamW(optim_groups, lr=learning_rate, betas=(0.9, 0.95), eps=1e-8, fused=use_fused)
+
+        return optimizer
